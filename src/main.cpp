@@ -11,31 +11,38 @@
 #include <FS.h>
 #include "Splitter.h"
 #include "SerialCommunication.h"
-//Suggest SD card: Class4 or Class10; 4~16G memory; Fat32 format. File format support: .NC; .GC; .GCODE
-//SD memory card D0=IO2,DI=IO13,CK=IO14,CS=IO15,DET=IO39  file:///
+#include <OneWire.h>
+#include <DallasTemperature.h>
+// Suggest SD card: Class4 or Class10; 4~16G memory; Fat32 format. File format support: .NC; .GC; .GCODE
+// SD memory card SD_D0=I12 ,SD_DI=IO13,SD_CK=IO14,SD_CS=IO15,SD_DET=IO39/SENSOR_VN/ based on the C:\a\diy\my machines and tools\my components\makerBaseDlc32v2.1.002.sch
 /* Pins_Arduino_h */
-//music
+// music
 #define SERIAL_BAUDRATE 115200
 //STEPPER
 //we use PROBE_PIN=22 for stepper so connect PROBE S to DR8825 so we bend out the STEP pin of the leftmost X driver and put a wire
 //The step pin is the second from the left bottom see C:\a\diy\eagle\makerBaseDlc32v2.1.002MKS_DLC32 _V2.1_002_SCH.pdf
 
 //and we connect that to ProbeS Lower pin of connector J12 as
-//for temperature sensor use GND and 5 Volt from Probe connector and DAT to DHT_PIN=19 which is on extension LCD_MISO
-//BUZZER
+//for temperature sensor use either the dh TempAndHumidity with GND and 5 Volt from Probe connector and
+// DAT to DHT_PIN=19 which is on extension LCD_MISO
+//
+	//BUZZER
 //for speaker we use GND and on + in series with 100  OHM we use (GPIO23 which is the same as LCD_MOSI).
 //That means LCD_MOSI or Extension X2 pin 6 ---Buzzer with proper polarity --[100 Ohm]---GND
 //
-//MOTOR ON OFF Switch
+	//MOTOR ON OFF Switch
 // connect switch from GND to TURN_ON_STEPPER_PIN = 36/Sensor_VP SVP/- Xlimit on J9 (last to the right lower pin)) MOTOR starts when pin36 is put to Gnd
 //
 // for motor current // Vref = Imax /2
 //for m17hs16-2004s1 https://www.omc-stepperonline.com/nema-17-bipolar-45ncm-64oz-in-2a-42x42x40mm-4-wires-w-1m-cable-connector-17hs16-2004s1 and Imax=2 AMp hold torque=Holding Torque: 45Ncm(64oz.in)
 //and https://www.youtube.com/watch?v=BV-ouxhZamI
 //  to measure on screw-driver=2*8*.068 about 1 volt but I'll go less maybe .9 volts
-enum {
+// 
+enum {//the number means IO pin heater=32 means heather is GPIO32
 	HEATER_PIN = 32, HEATER_PWM_CHANNEL = 0, STEPPER_PWM_STEP_PIN = 22/*probe pin*/, STEPPER_PWM_CHANNEL = 2,/*NOT USED I2SO_BUZZ_PIN = 0000???,*/
-	I2SO_DATA_PIN = 21, I2SO_CLOCK_PIN = 16, I2SO_LATCH_PIN = 17, LED_PIN = 2, POTENTIOMETER_PIN = 777777, DHT_PIN = 19/* LCD_MISO*/, TURN_ON_STEPPER_PIN = 36/*Sensor_VP SVP -*/, SPEAKER = 23, /*LCD_MOSI*/SPEAKER_CHANNEL = 4, FAN_PIN = 33/*LCD_RS*/, FAN_PWM_CHANNEL = 6, MEMORY_CS_PIN = 15
+	I2SO_DATA_PIN = 21, I2SO_CLOCK_PIN = 16, I2SO_LATCH_PIN = 17, LED_PIN = 2, POTENTIOMETER_PIN = 777777, DHT_PIN = 19/* LCD_MISO*/, 
+	TURN_ON_STEPPER_PIN = 36/*Sensor_VP SVP -*/, SPEAKER = 23, /*LCD_MOSI*/SPEAKER_CHANNEL = 4, FAN_PIN = 33/*LCD_RS*/, FAN_PWM_CHANNEL = 6, MEMORY_CS_PIN = 15,
+	/*used internally by SD no need to declare*/SD_D0_PIN=12 ,SD_DI=13,SD_CK=14,SD_CS=15,SD_DET=39
 };
 //
 enum {
@@ -49,7 +56,10 @@ enum {
 //timer
 //temperature sensor stuff
 const float MODERATE_HEAT_POWER = 0.8;
-DHTesp dht;
+// Temperature either dh or oneWireDallas
+DHTesp dhTempSensor; // used in setup and readTemperature
+OneWire oneWire(26);  // GPIO where the DS18B20 is connected to. Used to be GPIO36 but not anymore
+DallasTemperature tempSensor(&oneWire); 
 int lastTempHumidityReadTime = 0; //never
 int lastAlertTime = 0; //never
 float desiredTemperature = 37.0; //seed it
@@ -149,7 +159,7 @@ void setup() {
 	ledcWrite(SPEAKER_CHANNEL, 0); //duty Cycle = 0
 	play(validChoice);
 	// temperature sensor
-	dht.setup(DHT_PIN, DHTesp::DHT22);
+	dhTempSensor.setup(DHT_PIN, DHTesp::DHT22);
 	Serial.println("DHT initiated");
 	//heater
 	pinMode(HEATER_PIN, OUTPUT);
@@ -165,7 +175,7 @@ void setup() {
 	stopStepper();
 	play(scaleLouder);
 	fanSetup();
-	//setupSDCard();
+	setupSDCard();
 	//oneFullRotation();
 	Serial.println("=================================END Setup==================================");
 }
@@ -174,14 +184,12 @@ void setup() {
 void loop() {
 	String command = serialCommunication.checkForCommand();
 	if (!command.equals("")) {
-		Serial.print("lookup command ");
-		Serial.println(command);
 		if (command.indexOf("d") != -1) {
 			Serial.print("found command d: ");
 			File dir = SD.open("/");
 			printDirectory(dir, 0);
 		}
-		if (command.indexOf("s") != -1) {
+		else if (command.indexOf("s") != -1) {
 			Serial.print("found command s: ");
 		    Splitter splitter = Splitter(command);
 			String newRPMAsString =splitter.getItemAtIndex(1);
@@ -191,9 +199,14 @@ void loop() {
 			desiredRPM= newRPMAsString.toDouble();
 			Serial.println("new RPM is: "+newRPMAsString);
 			startStepper();
+		} else if (command.indexOf("?") != -1) {
+			Serial.print("Please enter the new desired RPM after s. Like s 80 for RPM=80");
 		}
-
-	}
+		else {
+			Serial.print("cannot find command ");
+			Serial.println(command);
+		}
+        }
 	int stepperButtonPosition = readTurnOnStepper();//-1 for unchanged
 	if (stepperButtonPosition == 1) {
 		startStepper();
@@ -314,10 +327,10 @@ void stopStepper() {
 int getTemperature(int &temp, int &humid) {
 // Reading temperature for humidity takes about 250 milliseconds!
 // Sensor readings may also be up to 2 seconds 'old' (it's a very slow sensor)
-	TempAndHumidity newValues = dht.getTempAndHumidity();
+	TempAndHumidity newValues = dhTempSensor.getTempAndHumidity();
 // Check if any reads failed and exit early (to try again).
-	if (dht.getStatus() != 0) {
-		Serial.println("DHT12 error status: " + String(dht.getStatusString()));
+	if (dhTempSensor.getStatus() != 0) {
+		Serial.println("DHT12 error status: " + String(dhTempSensor.getStatusString()));
 		play(auClairDeLaLune);
 		return false;
 	}
@@ -391,7 +404,6 @@ int readPotentiometer() {
 // WeMos D1 esp8266: D8 as standard
 const int chipSelect = SS;
 
-void printDirectory(File dir, int numTabs);
 
 void setupSDCard() {
 	Serial.print("\nInitializing SD card...");
