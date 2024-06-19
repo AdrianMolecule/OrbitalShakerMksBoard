@@ -10,7 +10,7 @@ class SerialCommunication final {
 public:
 	SerialCommunication();
 	virtual ~SerialCommunication();
-	String checkForCommand();
+	void checkForCommand(String& command, String& commandArguments);
 	void executeCommand(char *token, String extra);
 };
 
