@@ -72,7 +72,7 @@ enum {  // the number means IO pin heater=32 means heather is GPIO32
 };
 //
 enum {
-    TIMESTAMP = true,
+    TIME_DISPLAY = true,
     TEMP_DISPLAY = true,
     USE_STEPPER_ON_OFF_SWITCH = false,
     USE_ONE_WIRE_FOR_TEMPERATURE = true
@@ -95,6 +95,7 @@ DallasTemperature tempSensor(&oneWire);
 int lastTempHumidityReadTime = 0;  // never
 int lastAlertTime = 0;             // never
 float desiredTemperature = 37.0;   // seed it
+int microstepping = 4;
 float oldTemperature = 0.;
 float minHumidity = 60.;
 boolean heaterWasOn = false;
@@ -140,6 +141,7 @@ void setupSDCard();
 void printDirectory(File dir, int numTabs);
 int getTemperature(float &temp, float &humid);
 void writeData(byte *bits);
+void processCommand();
 // end INCLUDES.h
 // music;
 Melody scaleLouder("c>>> d>> e>f g< a<< b<<< c*<<<<", 480);
@@ -207,38 +209,7 @@ void setup() {
 
 //
 void loop() {
-    String command = "";
-    String commandArguments = "";
-    serialCommunication.checkForCommand(command, commandArguments);
-    if (!command.equals("")) {
-        if (command.indexOf("d") != -1) {
-            File dir = SD.open("/");
-            printDirectory(dir, 0);
-        } else if (command.indexOf("s") != -1) {
-            // Splitter splitter = Splitter(command);
-            // String newRPMAsString = splitter.getItemAtIndex(1);
-            if (commandArguments.isEmpty()) {
-                Serial.print("Please enter the new desired RPM after s. Like s 80 for RPM=80");
-            }
-            desiredRPM = commandArguments.toDouble();
-            Serial.println("new RPM is: " + commandArguments);
-            startStepper();
-        } else if (command.indexOf("t") != -1) {
-            Serial.print("found command t: ");
-            if (commandArguments.isEmpty()) {
-                Serial.print("Please enter the new desired temperature . Like command 29 for temp 29 Celsius");
-            }
-            desiredTemperature = commandArguments.toFloat();
-            Serial.print("new desiredTemperature is: ");
-            Serial.println(desiredTemperature);
-        } else if (command.indexOf("?") != -1) {
-            Serial.print("Please enter the new desired RPM after s. Like s 80 for RPM=80");
-            Serial.print("Please enter the new desired temp after t. Like t 37 fordesired temp=37 cesius");
-        } else {
-            Serial.print("cannot find command ");
-            Serial.println(command);
-        }
-    }
+    processCommand();
     if (USE_STEPPER_ON_OFF_SWITCH) {
         int stepperButtonPosition = readTurnOnStepper();  //-1 for unchanged
         if (stepperButtonPosition == 1) {
@@ -261,10 +232,14 @@ void loop() {
             maxTemperature = temperature;
         }
         if (TEMP_DISPLAY) {
-            Serial.print("Temp: " + String(temperature) + " Celsius, "+ (USE_ONE_WIRE_FOR_TEMPERATURE==0 ? "Humidity:"+ String(humidity):"") + " maximum temperature: " + String(maxTemperature));
-            if (TIMESTAMP) {
-                Serial.println(" after: " + getFormatedTimeSinceStart());
-            } else {
+            Serial.print("Current temp: " + String(temperature) + " Celsius, " + (USE_ONE_WIRE_FOR_TEMPERATURE == 0 ? "Humidity:" + String(humidity) : "") );
+            Serial.print("DesiredTemperature: ");
+            Serial.print(desiredTemperature);
+            Serial.print (" max temperature: " + String(maxTemperature));
+            if (TIME_DISPLAY) {
+                Serial.println(" Time since start: " + getFormatedTimeSinceStart());
+            }
+            else {
                 Serial.println("");
             }
         }
@@ -274,14 +249,8 @@ void loop() {
                 firstTimeTurnOnHeater = false;
             }
             digitalWrite(LED_PIN, HIGH);
-            if (TEMP_DISPLAY) {
-                Serial.print("desiredTemperature ");
-                Serial.print(desiredTemperature);
-                Serial.print(", current Temperature ");
-                Serial.println(temperature);
-            }
             if (desiredTemperature - temperature >= 2) {
-                heater(true, maxHeaterDutyCycle);// Heater start
+                heater(true, maxHeaterDutyCycle);  // Heater start
             } else {
                 heater(true, maxHeaterDutyCycle * MODERATE_HEAT_POWER);
             }
@@ -296,9 +265,9 @@ void loop() {
                     play(frereJacques);
             }
             digitalWrite(LED_PIN, LOW);
-            heater(false,0);//second arg is ignored when heater is turned off
+            heater(false, 0);  // second arg is ignored when heater is turned off
             heaterWasOn = false;
-            if(!USE_ONE_WIRE_FOR_TEMPERATURE && humidity < minHumidity && ((millis() - lastAlertTime) / 1000) > 200 /* about 3 minutes*/) {
+            if (!USE_ONE_WIRE_FOR_TEMPERATURE && humidity < minHumidity && ((millis() - lastAlertTime) / 1000) > 200 /* about 3 minutes*/) {
                 Serial.println("WARNING !!! humidity dropped less then minimal humidity");
                 lastAlertTime = millis();
                 if (DEBUG_LOW_HUMIDITY) {
@@ -309,8 +278,64 @@ void loop() {
     }
 }
 
+void processCommand() {
+    String command = "";
+    String commandArguments = "";
+    serialCommunication.checkForCommand(command, commandArguments);
+    if (!command.equals("")) {
+        if (command.indexOf("d") == 0) {
+            File dir = SD.open("/");
+            printDirectory(dir, 0);
+        } else if (command.indexOf("s") == 0) {
+            // Splitter splitter = Splitter(command);
+            // String newRPMAsString = splitter.getItemAtIndex(1);
+            if (commandArguments.isEmpty()) {
+                Serial.print("Please enter the new desired RPM after s. Like s 80 for RPM=80");
+            }
+            desiredRPM = commandArguments.toDouble();
+            Serial.println("new RPM is: " + commandArguments);
+            startStepper();
+        } else if (command.indexOf("t") == 0) {
+            if (commandArguments.isEmpty()) {
+                Serial.print("Please enter the new desired temperature . Like command 29 for temp 29 Celsius");
+            }
+            desiredTemperature = commandArguments.toFloat();
+            Serial.print("new desiredTemperature is: ");
+            Serial.println(desiredTemperature);
+        } else if (command.indexOf("m") == 0) {
+            if (commandArguments.isEmpty()) {
+                Serial.print("Please enter m 0 for motor off or m anything else for motor on");
+            }
+            int arg = commandArguments.toInt();
+            if (arg == 0) {
+                stopStepper();
+            } else {
+                startStepper();
+            }
+            Serial.print("new desiredTemperature is: ");
+            Serial.println(desiredTemperature);
+        } else if (command.indexOf("r") == 0) {
+            startTime = millis();
+            desiredTemperature = commandArguments.toFloat();
+            Serial.println("Reset start time to now ");
+        } else if (command.indexOf("?") == 0) {
+            Serial.println("=========== current values ============");
+            Serial.println("desiredRPM: " + String(desiredRPM));
+            Serial.println("desiredTemperature: " + String(desiredTemperature));
+            Serial.println("timeSinceStartOrTimeReset: " + getFormatedTimeSinceStart());
+            Serial.println("=========== Commands help ============");
+            Serial.println("Possible commands:\n s desired RPM. Like s 80 for RPM=80");
+            Serial.println("r reset start time to now");
+            Serial.println("m 0 stop rotator, m anything else start rotation");
+        } else {
+            Serial.print("cannot find command ");
+            Serial.println(command);
+        }
+    }
+}
+
 void startStepperGradual() {
-    int freq = 4 * (int)(desiredRPM / 60 * 200);  // in hertz
+    int freq = microstepping * (int)(desiredRPM / 60 * 200);  // in hertz
     Serial.println("START STEPPER with frequency:" + String(freq));
     setupI2SOShiftEnableMotor();
     for (int f = freq * .6; f < freq * .7; f += 5) {
@@ -356,9 +381,9 @@ void stopStepper() {
 int getTemperature(float &temp, float &humid) {
     if (USE_ONE_WIRE_FOR_TEMPERATURE) {
         tempSensor.requestTemperatures();
-        Serial.print("Temperature: ");  // print the temperature in Celsius
+        //Serial.print("Temperature: ");  // print the temperature in Celsius
         temp = tempSensor.getTempCByIndex(0);
-        Serial.println(temp);
+        //Serial.println(temp);
     } else {
         // Reading temperature for humidity takes about 250 milliseconds!
         // Sensor readings may also be up to 2 seconds 'old' (it's a very slow sensor)
@@ -432,7 +457,7 @@ void writeData(byte *bits) {
 // Function for reading the Potentiometer
 int readPotentiometer() {
     uint16_t customDelay = analogRead(POTENTIOMETER_PIN);  // Reads the potentiometer
-    int newRPM = map(customDelay, 0, 1023, 0, 300);   // read values of the potentiometer from 0 to 1023 into  d0->300
+    int newRPM = map(customDelay, 0, 1023, 0, 300);        // read values of the potentiometer from 0 to 1023 into  d0->300
     return 300;
 }
 
