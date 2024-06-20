@@ -104,7 +104,7 @@ boolean firstTimeReachDesiredTemperature = true;
 float maxTemperature = 0;
 // motor what we want for OS motor
 // https://github.com/nenovmy/arduino/blob/master/leds_disco/leds_disco.ino
-double desiredRPM = 40;
+float desiredRPM = 80;
 /* Setting all PWM motor, Heater PWM Properties */
 const int PWMResolution = 10;
 const int MAX_DUTY_CYCLE = (int)(pow(2, PWMResolution) - 1);
@@ -142,6 +142,7 @@ void printDirectory(File dir, int numTabs);
 int getTemperature(float &temp, float &humid);
 void writeData(byte *bits);
 void processCommand();
+double rpmToHertz(float rpm);
 // end INCLUDES.h
 // music;
 Melody scaleLouder("c>>> d>> e>f g< a<< b<<< c*<<<<", 480);
@@ -162,7 +163,7 @@ SerialCommunication serialCommunication = SerialCommunication();
 
 void setup() {
     Serial.begin(115200);
-    Serial.println("=================================setup starting now=============================");
+    Serial.println("================================= Setup Starting Now =============================");
     // Declare pins as output:
     pinMode(LED_PIN, OUTPUT);
     pinMode(STEPPER_PWM_STEP_PIN, OUTPUT);
@@ -192,7 +193,7 @@ void setup() {
     delay(20);
     ledcAttachPin(HEATER_PIN, HEATER_PWM_CHANNEL); /* Attach the STEP_PIN PWM Channel to the GPIO Pin */
     delay(20);
-    Serial.println("stepper target speed at RPM :");
+    Serial.println("stepper desiredRPM:");
     Serial.println(desiredRPM);
     // motor
     Serial.println("Initial disabling of the stepper in setup");
@@ -212,6 +213,7 @@ void loop() {
     processCommand();
     if (USE_STEPPER_ON_OFF_SWITCH) {
         int stepperButtonPosition = readTurnOnStepper();  //-1 for unchanged
+        Serial.print("stepperButtonPosition:" + String(stepperButtonPosition));
         if (stepperButtonPosition == 1) {
             startStepper();
             fan(false);
@@ -232,14 +234,13 @@ void loop() {
             maxTemperature = temperature;
         }
         if (TEMP_DISPLAY) {
-            Serial.print("Current temp: " + String(temperature) + " Celsius, " + (USE_ONE_WIRE_FOR_TEMPERATURE == 0 ? "Humidity:" + String(humidity) : "") );
+            Serial.print("Current temp: " + String(temperature) + ", " + (USE_ONE_WIRE_FOR_TEMPERATURE == 0 ? "Humidity:" + String(humidity) : ""));
             Serial.print("DesiredTemperature: ");
             Serial.print(desiredTemperature);
-            Serial.print (" max temperature: " + String(maxTemperature));
+            Serial.print(" max temperature: " + String(maxTemperature));
             if (TIME_DISPLAY) {
                 Serial.println(" Time since start: " + getFormatedTimeSinceStart());
-            }
-            else {
+            } else {
                 Serial.println("");
             }
         }
@@ -292,7 +293,7 @@ void processCommand() {
             if (commandArguments.isEmpty()) {
                 Serial.print("Please enter the new desired RPM after s. Like s 80 for RPM=80");
             }
-            desiredRPM = commandArguments.toDouble();
+            desiredRPM = commandArguments.toFloat();
             Serial.println("new RPM is: " + commandArguments);
             startStepper();
         } else if (command.indexOf("t") == 0) {
@@ -334,42 +335,32 @@ void processCommand() {
     }
 }
 
-void startStepperGradual() {
-    int freq = microstepping * (int)(desiredRPM / 60 * 200);  // in hertz
-    Serial.println("START STEPPER with frequency:" + String(freq));
-    setupI2SOShiftEnableMotor();
-    for (int f = freq * .6; f < freq * .7; f += 5) {
-        ledcSetup(STEPPER_PWM_CHANNEL, f, PWMResolution);
-        // delay(5);
-        ledcAttachPin(STEPPER_PWM_STEP_PIN, STEPPER_PWM_CHANNEL); /* Attach the STEP_PIN PWM Channel to the GPIO Pin */
-        // delay(5);
-        ledcWrite(STEPPER_PWM_CHANNEL, halfDutyCycle);
-        delay(200);
-    }
-    for (int f = freq * .7; f <= freq; f += 100) {
-        ledcSetup(STEPPER_PWM_CHANNEL, f, PWMResolution);
-        // delay(5);
-        ledcAttachPin(STEPPER_PWM_STEP_PIN, STEPPER_PWM_CHANNEL); /* Attach the STEP_PIN PWM Channel to the GPIO Pin */
-        // delay(5);
-        ledcWrite(STEPPER_PWM_CHANNEL, halfDutyCycle);
-        delay(100);
-    }
-    // play(auClairDeLaLune);
-}
-
 void startStepper() {
-    int freq = 4 * (int)(desiredRPM / 60 * 200);  // in hertz
-    Serial.println("START STEPPER with frequency:" + String(freq));
+    Serial.println("START stepper gradually");
     setupI2SOShiftEnableMotor();
-    ledcSetup(STEPPER_PWM_CHANNEL, freq, PWMResolution);
+    for (int rpm = 1; rpm <= desiredRPM; rpm += 10) {
+        double f = rpmToHertz(rpm);
+        Serial.println("START STEPPER gradually f:" + String(f));
+        ledcSetup(STEPPER_PWM_CHANNEL, f, PWMResolution);
+        // delay(5);
+        ledcAttachPin(STEPPER_PWM_STEP_PIN, STEPPER_PWM_CHANNEL); /* Attach the STEP_PIN PWM Channel to the GPIO Pin */
+        // delay(5);
+        ledcWrite(STEPPER_PWM_CHANNEL, halfDutyCycle);
+        delay(300);// this could be adjusted based on rpm but it seems to work fine
+    }
+    double f = rpmToHertz(desiredRPM);
+    Serial.println("START STEPPER with frequency:" + String(f));
+    ledcSetup(STEPPER_PWM_CHANNEL, f, PWMResolution);
     // delay(5);
     ledcAttachPin(STEPPER_PWM_STEP_PIN, STEPPER_PWM_CHANNEL); /* Attach the STEP_PIN PWM Channel to the GPIO Pin */
     // delay(5);
     ledcWrite(STEPPER_PWM_CHANNEL, halfDutyCycle);
-    delay(100);
     // play(auClairDeLaLune);
 }
 
+double rpmToHertz(float rpm) {
+    return microstepping * (int)(rpm / 60 * 200);  // in hertz
+}
 //
 void stopStepper() {
     Serial.println("STOP STEPPER");
@@ -381,9 +372,9 @@ void stopStepper() {
 int getTemperature(float &temp, float &humid) {
     if (USE_ONE_WIRE_FOR_TEMPERATURE) {
         tempSensor.requestTemperatures();
-        //Serial.print("Temperature: ");  // print the temperature in Celsius
+        // Serial.print("Temperature: ");  // print the temperature in Celsius
         temp = tempSensor.getTempCByIndex(0);
-        //Serial.println(temp);
+        // Serial.println(temp);
     } else {
         // Reading temperature for humidity takes about 250 milliseconds!
         // Sensor readings may also be up to 2 seconds 'old' (it's a very slow sensor)
