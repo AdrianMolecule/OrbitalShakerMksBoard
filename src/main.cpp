@@ -55,7 +55,7 @@ enum {  // the number means IO pin heater=32 means heather is GPIO32
     I2SO_CLOCK_PIN = 16,
     I2SO_LATCH_PIN = 17,
     LED_PIN = 2,
-    POTENTIOMETER_PIN = 777777,
+    POTENTIOMETER_PIN = 127,
     TEMP_SENSOR_PIN = 19 /* LCD_MISO*/,
     TURN_ON_STEPPER_PIN = 36 /*Sensor_VP SVP -*/,
     SPEAKER = 23,
@@ -87,7 +87,7 @@ enum {
 // FAN https://fdossena.com/?p=ArduinoFanControl/i.md
 // timer
 // temperature sensor stuff
-const float MODERATE_HEAT_POWER = 0.8;
+const float MODERATE_HEAT_POWER = 0.9;
 // Temperature either dh or oneWireDallas
 DHTesp dhTempSensor;               // used in setup and readTemperature
 OneWire oneWire(TEMP_SENSOR_PIN);  // GPIO where the DS18B20 is connected to. Used to be GPIO36 but not anymore
@@ -431,7 +431,7 @@ void writeData(byte *bits) {
 
 // Function for reading the Potentiometer
 int readPotentiometer() {
-    int customDelay = analogRead(POTENTIOMETER_PIN);  // Reads the potentiometer
+    uint16_t customDelay = analogRead(POTENTIOMETER_PIN);  // Reads the potentiometer
     int newRPM = map(customDelay, 0, 1023, 0, 300);   // read values of the potentiometer from 0 to 1023 into  d0->300
     return 300;
 }
@@ -620,6 +620,7 @@ void heater(boolean on, int duty) {
         if (on) {
             Serial.print(" with duty at:");
             Serial.print(((float)duty / MAX_DUTY_CYCLE));
+            Serial.print("%");
         }
         Serial.println();
     }
