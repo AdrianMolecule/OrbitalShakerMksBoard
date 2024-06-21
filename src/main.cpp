@@ -338,18 +338,22 @@ void processCommand() {
 void startStepper() {
     Serial.println("START stepper gradually");
     setupI2SOShiftEnableMotor();
-    for (int rpm = 1; rpm <= desiredRPM; rpm += 10) {
+    for (int rpm = 5; rpm <= desiredRPM; rpm += 5) {
         double f = rpmToHertz(rpm);
-        Serial.println("START STEPPER gradually f:" + String(f));
+        Serial.println("START STEPPER with frequency:" + String(f) + " and RPM:" + String(rpm));
         ledcSetup(STEPPER_PWM_CHANNEL, f, PWMResolution);
         // delay(5);
         ledcAttachPin(STEPPER_PWM_STEP_PIN, STEPPER_PWM_CHANNEL); /* Attach the STEP_PIN PWM Channel to the GPIO Pin */
         // delay(5);
         ledcWrite(STEPPER_PWM_CHANNEL, halfDutyCycle);
-        delay(300);// this could be adjusted based on rpm but it seems to work fine
+        // if (rpm < 40) {
+        //     delay(300);  // this could be adjusted based on rpm but it seems to work fine
+        // } else {
+            delay(500);
+        //}
     }
     double f = rpmToHertz(desiredRPM);
-    Serial.println("START STEPPER with frequency:" + String(f));
+    Serial.println("STARTED STEPPER with frequency:" + String(f) + " and RPM:" + String(desiredRPM));
     ledcSetup(STEPPER_PWM_CHANNEL, f, PWMResolution);
     // delay(5);
     ledcAttachPin(STEPPER_PWM_STEP_PIN, STEPPER_PWM_CHANNEL); /* Attach the STEP_PIN PWM Channel to the GPIO Pin */
