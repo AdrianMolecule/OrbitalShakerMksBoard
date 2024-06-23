@@ -71,11 +71,14 @@ enum {  // the number means IO pin heater=32 means heather is GPIO32
     SPINDLE_ENABLE_PIN = 27, /*internally connected*/
 };
 //
-enum {
+enum {  // for behaviour
     TIME_DISPLAY = true,
-    TEMP_DISPLAY = true,
-    USE_STEPPER_ON_OFF_SWITCH = false,
-    USE_ONE_WIRE_FOR_TEMPERATURE = true
+    TEMPERATURE_DISPLAY = true,
+    MOST_MUSIC_OFF = false,  // turns off all music except for errors, warnings, time reached and first time desired temperature reached
+    TEMPERATURE_REACHED_MUSIC_ON = true,
+    // for hardware config
+    USE_STEPPER_ON_OFF_SWITCH = false,// on case we add an optional ON/OFF button for all the rotator. It could be a capacitive one.
+    USE_ONE_WIRE_FOR_TEMPERATURE=true,
 };
 //
 enum {
@@ -95,6 +98,8 @@ DallasTemperature tempSensor(&oneWire);
 int lastTempHumidityReadTime = 0;  // never
 int lastAlertTime = 0;             // never
 float desiredTemperature = 37.0;   // seed it
+float desiredRPM = 80;
+int desiredEndTime=-1;//in minutes
 int microstepping = 4;
 float oldTemperature = 0.;
 float minHumidity = 60.;
@@ -104,7 +109,6 @@ boolean firstTimeReachDesiredTemperature = true;
 float maxTemperature = 0;
 // motor what we want for OS motor
 // https://github.com/nenovmy/arduino/blob/master/leds_disco/leds_disco.ino
-float desiredRPM = 80;
 /* Setting all PWM motor, Heater PWM Properties */
 const int PWMResolution = 10;
 const int MAX_DUTY_CYCLE = (int)(pow(2, PWMResolution) - 1);
@@ -123,6 +127,7 @@ int lastButtonState;              // the current reading from the input pin whic
 
 // declare some methods because we don't have an include file for this .ino file
 void play(Melody melody);
+void play(Melody melody, bool force);
 void startStepper();
 void stopStepper();
 void fanSetup();
@@ -130,6 +135,7 @@ void fan(bool);
 int readPotentiometer();
 void heater(boolean on, int duty);
 String getFormatedTimeSinceStart();
+void desiredEndTimeCheck();
 void setupI2SOShiftEnableMotor();
 void setupI2SOShiftDisableMotor();
 void createDir(fs::FS &fs, const char *path);
@@ -224,8 +230,9 @@ void loop() {
             }
         }
     }
-    // Get temperature
-    float temperature;
+    desiredEndTimeCheck();
+        // Get temperature
+        float temperature;
     float humidity;
     if (((millis() - lastTempHumidityReadTime) / 1000) > 2) {  // every 2 seconds
         getTemperature(temperature, humidity);
@@ -233,7 +240,7 @@ void loop() {
         if (temperature > maxTemperature) {
             maxTemperature = temperature;
         }
-        if (TEMP_DISPLAY) {
+        if (TEMPERATURE_DISPLAY) {
             Serial.print("Current temp: " + String(temperature) + ", " + (USE_ONE_WIRE_FOR_TEMPERATURE == 0 ? "Humidity:" + String(humidity) : ""));
             Serial.print("DesiredTemperature: ");
             Serial.print(desiredTemperature);
@@ -260,7 +267,9 @@ void loop() {
             if (heaterWasOn) {  // was on before this, used to stop printing too many times
                 Serial.println("Turning heater OFF");
                 if (firstTimeReachDesiredTemperature) {
-                    play(frereJacquesFull);
+                    if (TEMPERATURE_REACHED_MUSIC_ON) {
+                        play(frereJacquesFull, true);
+                    }
                     firstTimeReachDesiredTemperature = false;
                 } else
                     play(frereJacques);
@@ -319,6 +328,13 @@ void processCommand() {
             startTime = millis();
             desiredTemperature = commandArguments.toFloat();
             Serial.println("Reset start time to now ");
+        } else if (command.indexOf("e") == 0) {
+            if (commandArguments.isEmpty()) {
+                Serial.print("Please enter an end time in minutes");
+            }
+            desiredEndTime = commandArguments.toInt();
+            Serial.print("new desiredEndTime is: ");
+            Serial.println(desiredEndTime);
         } else if (command.indexOf("?") == 0) {
             Serial.println("=========== current values ============");
             Serial.println("desiredRPM: " + String(desiredRPM));
@@ -328,6 +344,7 @@ void processCommand() {
             Serial.println("Possible commands:\n s desired RPM. Like s 80 for RPM=80");
             Serial.println("r reset start time to now");
             Serial.println("m 0 stop rotator, m anything else start rotation");
+            Serial.println("e time in minutes End time in minutes that will trigger an alarm to be played. So e 60 meand play alarm in 1 hour");
         } else {
             Serial.print("cannot find command ");
             Serial.println(command);
@@ -349,7 +366,7 @@ void startStepper() {
         // if (rpm < 40) {
         //     delay(300);  // this could be adjusted based on rpm but it seems to work fine
         // } else {
-            delay(500);
+        delay(500);
         //}
     }
     double f = rpmToHertz(desiredRPM);
@@ -392,7 +409,7 @@ int getTemperature(float &temp, float &humid) {
         temp = newValues.temperature;
         if (temp < 0 || temp > 70) {
             for (int i = 0; i < 10; i++) {
-                play(darthVader);
+                play(darthVader, true);// temperature out of range
             }
         }
         humid = newValues.humidity;
@@ -662,7 +679,9 @@ String formatTime(unsigned long time) {
 }
 //
 void play(Melody melody) {
-    return;
+    if (MOST_MUSIC_OFF) {
+        return;
+    }
     melody.restart();         // The melody iterator is restarted at the beginning.
     while (melody.hasNext())  // While there is a next note to play.
     {
@@ -687,6 +706,18 @@ void play(Melody melody) {
     delay(1000);
 }
 
+void play(Melody melody, bool force) {
+    if (force) {
+        play(melody);
+    }
+}
+
+void desiredEndTimeCheck(){
+    if (desiredEndTime != -1 && desiredEndTime * 60 * 1000 >= (millis()-startTime)) {
+        Serial.println("Desired end time reached " + getFormatedTimeSinceStart());
+        play(scaleLouder, true);
+    }
+}
 void createDir(fs::FS &fs, const char *path) {
     Serial.printf("Creating Dir: %s\n", path);
     if (fs.mkdir(path)) {
