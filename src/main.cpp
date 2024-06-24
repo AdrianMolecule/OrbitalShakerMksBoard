@@ -77,8 +77,8 @@ enum {  // for behaviour
     MOST_MUSIC_OFF = false,  // turns off all music except for errors, warnings, time reached and first time desired temperature reached
     TEMPERATURE_REACHED_MUSIC_ON = true,
     // for hardware config
-    USE_STEPPER_ON_OFF_SWITCH = false,// on case we add an optional ON/OFF button for all the rotator. It could be a capacitive one.
-    USE_ONE_WIRE_FOR_TEMPERATURE=true,
+    USE_STEPPER_ON_OFF_SWITCH = false,  // on case we add an optional ON/OFF button for all the rotator. It could be a capacitive one.
+    USE_ONE_WIRE_FOR_TEMPERATURE = true,
 };
 //
 enum {
@@ -99,7 +99,7 @@ int lastTempHumidityReadTime = 0;  // never
 int lastAlertTime = 0;             // never
 float desiredTemperature = 37.0;   // seed it
 float desiredRPM = 80;
-int desiredEndTime=-1;//in minutes
+int desiredEndTime = -1;  // in minutes
 int microstepping = 4;
 float oldTemperature = 0.;
 float minHumidity = 60.;
@@ -117,7 +117,7 @@ const int halfDutyCycle = MAX_DUTY_CYCLE / 2;
 const float fanDutyCyclePercentage = 1;
 const int FAN_FREQUENCY = 40000;
 // heater pad
-int maxHeaterDutyCycle = MAX_DUTY_CYCLE * .75;  // 80x100mm 12V DC 20W Silicone Heated Bed Heating Pad
+int maxHeaterDutyCycle = MAX_DUTY_CYCLE * .80;  // 80x100mm 12V DC 20W Silicone Heated Bed Heating Pad
 // de-bounce variables
 const int DEBOUNCE_TIME = 200;
 unsigned long lastDebounceTime = 0;
@@ -231,8 +231,8 @@ void loop() {
         }
     }
     desiredEndTimeCheck();
-        // Get temperature
-        float temperature;
+    // Get temperature
+    float temperature;
     float humidity;
     if (((millis() - lastTempHumidityReadTime) / 1000) > 2) {  // every 2 seconds
         getTemperature(temperature, humidity);
@@ -333,8 +333,9 @@ void processCommand() {
                 Serial.print("Please enter an end time in minutes");
             }
             desiredEndTime = commandArguments.toInt();
-            Serial.print("new desiredEndTime is: ");
-            Serial.println(desiredEndTime);
+            Serial.print("new desiredEndTime (from the very start not from now) is: ");
+            Serial.print(desiredEndTime);
+            Serial.println(" minutes");
         } else if (command.indexOf("?") == 0) {
             Serial.println("=========== current values ============");
             Serial.println("desiredRPM: " + String(desiredRPM));
@@ -409,7 +410,7 @@ int getTemperature(float &temp, float &humid) {
         temp = newValues.temperature;
         if (temp < 0 || temp > 70) {
             for (int i = 0; i < 10; i++) {
-                play(darthVader, true);// temperature out of range
+                play(darthVader, true);  // temperature out of range
             }
         }
         humid = newValues.humidity;
@@ -712,9 +713,9 @@ void play(Melody melody, bool force) {
     }
 }
 
-void desiredEndTimeCheck(){
-    if (desiredEndTime != -1 && desiredEndTime * 60 * 1000 >= (millis()-startTime)) {
-        Serial.println("Desired end time reached " + getFormatedTimeSinceStart());
+void desiredEndTimeCheck() {
+    if (desiredEndTime != -1 && desiredEndTime * 60 * 1000 <= (millis() - startTime)) {
+        Serial.println("Desired end time "+String(desiredEndTime)+" reached. Current elepsed time: " + getFormatedTimeSinceStart());
         play(scaleLouder, true);
     }
 }
