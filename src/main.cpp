@@ -98,7 +98,7 @@ DallasTemperature tempSensor(&oneWire);
 int lastTempHumidityReadTime = 0;  // never
 int lastAlertTime = 0;             // never
 float desiredTemperature = 37.0;   // seed it
-float desiredRPM = 80;
+float desiredRPM = 80;//30 for demo
 int desiredEndTime = -1;  // in minutes
 int microstepping = 4;
 float oldTemperature = 0.;
@@ -342,7 +342,7 @@ void processCommand() {
             Serial.println("desiredTemperature: " + String(desiredTemperature));
             Serial.println("timeSinceStartOrTimeReset: " + getFormatedTimeSinceStart());
             Serial.println("=========== Commands help ============");
-            Serial.println("Possible commands:\n s desired RPM. Like s 80 for RPM=80");
+            Serial.println("Possible commands:\ns desired RPM. Like s 80 for RPM=80");
             Serial.println("r reset start time to now");
             Serial.println("m 0 stop rotator, m anything else start rotation");
             Serial.println("e time in minutes End time in minutes that will trigger an alarm to be played. So e 60 meand play alarm in 1 hour");
