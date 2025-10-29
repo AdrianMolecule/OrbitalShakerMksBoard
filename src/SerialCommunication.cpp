@@ -24,7 +24,7 @@ void SerialCommunication::executeCommand(char *token, String extra) {
 //        Serial.println("version: Basic Bioreactor VSC 1");
 //        return;
 //    }
-//    boolean found = false;
+//    bool found = false;
 //    for (CommandFunctionStruct *commandToupleP = commands; commandToupleP->commandName != ""; commandToupleP++) {
 //        if (0 == strcasecmp(commandToupleP->commandName, token)) {
 //            (*commandToupleP->func)(&splitter);
