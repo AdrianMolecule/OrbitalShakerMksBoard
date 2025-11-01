@@ -31,8 +31,8 @@ int readTurnOnStepper() ;
 void setLoudness(int loudness) ;
 String getFormatedTimeSinceStart() ;
 void fanSetup() ;
-void fanOn(boolean print) ;
-void fanOff(boolean print) ;
+void fanOn(bool print) ;
+void fanOff(bool print) ;
 String formatTime(unsigned long time) ;
 void play(Melody melody) ;
 

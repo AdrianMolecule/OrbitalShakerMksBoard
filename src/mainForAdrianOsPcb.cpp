@@ -184,8 +184,7 @@ void setup() {
     pinMode(pins.SpeakerPin, OUTPUT);
     // alternate(LedPin, 50, 5);
     //   speaker
-    ledcSetup(pins.SpeakerChannel, 5000, 8);
-    ledcAttachPin(pins.SpeakerPin, pins.SpeakerChannel);
+    ledcAttach(pins.SpeakerPin,5000,8 );  // bool ledcAttach(uint8_t pin, uint32_t freq, uint8_t resolution);
     ledcWrite(pins.SpeakerChannel, 0);  // duty Cycle = 0
     play(validChoice);
     // temperature sensor
@@ -208,9 +207,7 @@ void setup() {
     if (pins.HeaterPin != Pins::NOT_PRESENT) {
         pinMode(pins.HeaterPin, OUTPUT);
         // setup the heater
-        ledcSetup(pins.HeaterPwmChannel, 40000, PWMResolution);  // normal PWM frrequency for MKS is 5000HZ
-        delay(20);
-        ledcAttachPin(pins.HeaterPin, pins.HeaterPwmChannel); /* Attach the StepPin PWM Channel to the GPIO Pin */
+        ledcAttach(pins.HeaterPin, 40000, PWMResolution);  // normal PWM frrequency for MKS is 5000HZ, Attach the StepPin PWM Channel to the GPIO Pin */
         delay(20);
         Serial.println("stepper desiredRPM:");
         Serial.println(desiredRPM);
@@ -480,9 +477,8 @@ void startStepper() {
     for (int rpm = (desiredRPM > 80 ? 80 : desiredRPM); rpm <= desiredRPM; rpm += 10) {
         double f = rpmToHertz(rpm);
         Serial.println("START STEPPER with frequency:" + String(f) + " and RPM:" + String(rpm));
-        ledcSetup(pins.StepperPwmChannel, f, PWMResolution);
         // delay(5);
-        ledcAttachPin(pins.StepperPwmStepPin, pins.StepperPwmChannel); /* Attach the StepPin PWM Channel to the GPIO Pin */
+        ledcAttach(pins.StepperPwmStepPin, f, PWMResolution); /* Attach to the GPIO Pin */
         // delay(5);
         ledcWrite(pins.StepperPwmChannel, HalfDuty_CYCLE);
         delay(500);
@@ -501,7 +497,7 @@ void stopStepper() {
     } else {
         Serial.println("STOP PCB STEPPER");
     }
-    ledcDetachPin(pins.StepperPwmStepPin); /* Detach the StepPin PWM Channel to the GPIO Pin */
+    ledcDetach(pins.StepperPwmStepPin); /* Detach the StepPin PWM Channel to the GPIO Pin */
     isStepperOn = false;
     delay(200);
 }
@@ -744,7 +740,6 @@ String getDurationToAlarm() {
 //
 void fanSetup() {
     pinMode(pins.FanPin, OUTPUT);
-    ledcSetup(pins.FanPwmChannel, FanFrequency /*Hz*/, 10 /*resolution 2 power=256 values*/);
     fan(true);
     Serial.print("Fan pin ");
     Serial.print(pins.FanPin);
@@ -765,10 +760,10 @@ void fan(bool on) {
         lastFanState = on;
     }
     if (on) {
-        ledcAttachPin(pins.FanPin, pins.FanPwmChannel);
+        ledcAttach(pins.FanPin, FanFrequency /*Hz*/, 10 /*resolution 2 power=256 values*/);
         ledcWrite(pins.FanPwmChannel, MaxDuty_CYCLE * fanDutyCyclePercentage);
     } else {
-        ledcDetachPin(pins.FanPin);
+        ledcDetach(pins.FanPin);
         ledcWrite(pins.FanPwmChannel, 0);
     }
     if (Debug::FAN) {

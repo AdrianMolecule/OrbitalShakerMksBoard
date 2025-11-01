@@ -13,3 +13,7 @@ then in main.cpp
 ([A-Z])([A-Z]*)_([A-Z])([A-Z]*)
 $1\L$2$3\L$4
 
+esptool chip-id
+chip type:          ESP32-D0WD (revision v1.0)
+Features:           Wi-Fi, BT, Dual Core + LP Core, 240MHz, Vref calibration in eFuse, Coding Scheme None
+Crystal frequency:  40MHz
